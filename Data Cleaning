@@ -1,0 +1,180 @@
+--Data Cleaning Project
+--Create Table Nashville and Import the table
+CREATE TABLE nashville (
+unique_id INT,
+parcel_id VARCHAR(40),
+land_use VARCHAR(50),
+propert_address VARCHAR(100),
+	sale_date VARCHAR(30),
+	sale_price VARCHAR(20),
+	legal_reference VARCHAR(50),
+	sold_as_vacant VARCHAR(30),
+	owner_name VARCHAR(60),
+	owner_address VARCHAR(150),
+	acreage NUMERIC,
+	tax_district VARCHAR(50),
+	land_value INT,
+	building_value INT,
+	total_value INT,
+	year_built INT,
+	bedrooms INT,
+	full_bath INT,
+	half_bath INT 
+	);
+	
+
+--Imported table successfully after making changes
+SELECT * FROM nashville;
+
+-- (1)Filling all NULL property addresses
+SELECT * FROM nashville
+WHERE propert_address IS NULL;
+
+SELECT * FROM nashville
+ORDER BY parcel_id;
+
+SELECT a.parcel_id, a.propert_address, b.parcel_id, b.propert_address, COALESCE(a.propert_address,b.propert_address)
+FROM nashville a
+JOIN nashville b
+ON a.parcel_id = b.parcel_id
+AND a.unique_id <> b.unique_id
+--bcoz parcel_id can be same, but we cannot update the rows with the same unique id, bcoz they are all different, so it doesn't end up replacing the original
+WHERE a.propert_address IS NULL;
+
+UPDATE nashville 
+SET propert_address = COALESCE(a.propert_address,b.propert_address)
+FROM nashville a
+JOIN nashville b
+ON a.parcel_id = b.parcel_id AND
+a.unique_id <> b.unique_id
+WHERE a.propert_address IS NULL;
+
+SELECT * FROM nashville
+WHERE propert_address IS NULL;
+--now no NULL rows will be displayed, because there aren't any
+
+
+-- (2) Breaking address into separate columns (Address, city and state)
+SELECT SUBSTRING(propert_address, 1, POSITION(',' IN propert_address) -1) AS address
+FROM nashville;
+--without the '-1' if you run the query, you will get the address display with the ',' in the end, to remove that, we put -1, to specify that one character is to be removed from the position mentioned
+-- but this will only separate the first column, we need the second hald of the address in another column, so the full query would be:
+SELECT SUBSTRING(propert_address, 1, POSITION(',' IN propert_address) -1) AS address,
+SUBSTRING(propert_address, POSITION(',' IN propert_address) +2, LENGTH(propert_address)) AS address
+FROM nashville;
+--the +1 in the full query makes sure that the starting of the column is not from the ',' and the space instead directly from the first letter of the word we are separating
+-- now, even though the display is two separate columns, we still need to make two new columns in the table for this
+ALTER TABLE nashville
+ADD property_address VARCHAR(100);
+
+UPDATE nashville
+SET property_address = SUBSTRING(propert_address, 1, POSITION(',' IN propert_address) -1);
+
+ALTER TABLE nashville
+ADD property_city VARCHAR(80);
+
+UPDATE nashville
+SET property_city = SUBSTRING(propert_address, POSITION(',' IN propert_address) +2, LENGTH(propert_address));
+
+SELECT * FROM nashville;
+
+
+-- (3) Now, separating owner address, which is a bit more complex
+--this time we shall not use SUBSTRING, for the sake of trying something new 
+SELECT owner_address FROM nashville;
+-- now, we shall be using PARSENAME (SPLIT_PART in postgresql)
+SELECT SPLIT_PART(owner_address, ',', 1),
+SPLIT_PART(owner_address, ', ', 2),
+SPLIT_PART(owner_address, ', ', 3) FROM nashville;
+--this will just display the output like this, but we want to columns to be separated out in the table as well, hence we shall update
+ALTER TABLE nashville
+ADD owner_address1 VARCHAR(100);
+
+UPDATE nashville
+SET owner_address1 = SPLIT_PART(owner_address, ',', 1);
+
+ALTER TABLE nashville
+ADD owner_address_city VARCHAR(100);
+
+UPDATE nashville
+SET owner_address_city = SPLIT_PART(owner_address, ', ', 2);
+
+ALTER TABLE nashville
+ADD owner_address_state VARCHAR(50);
+
+UPDATE nashville
+SET owner_address_state = SPLIT_PART(owner_address, ', ', 3);
+
+SELECT * FROM nashville;
+
+-- (4) Change Y and N abbreviations into yes and no, sold_as_vacant column
+SELECT DISTINCT sold_as_vacant FROM nashville;
+--now replacing all Ys with Yes, using update
+UPDATE nashville
+SET sold_as_vacant = 'Yes'
+Where sold_as_vacant = 'Y';
+
+UPDATE nashville
+SET sold_as_vacant = 'No'
+Where sold_as_vacant = 'N';
+
+--Another way of doing it using WHEN.. THEN
+SELECT sold_as_vacant,
+CASE WHEN sold_as_vacant = 'Y' THEN 'Yes'
+WHEN sold_as_vacant = 'N' THEN 'No'
+ELSE sold_as_vacant
+END
+FROM nashville;
+
+UPDATE nashville
+SET sold_as_vacant = CASE WHEN sold_as_vacant = 'Y' THEN 'Yes'
+WHEN sold_as_vacant = 'N' THEN 'No'
+ELSE sold_as_vacant
+END;
+
+
+SELECT DISTINCT sold_as_vacant FROM nashville;
+-- now there should only be Yes and NO
+
+-- (5) Removing Duplicates
+SELECT *,
+ROW_NUMBER() OVER(PARTITION BY parcel_id, propert_address, sale_price, sale_date, legal_reference
+				 ORDER BY unique_id)
+FROM nashville
+ORDER BY parcel_id;
+--when we partition by parcel_id and all, if all the rows are unqiue then the row number for all the rows should be 1 
+--because if each row is unique in each group there should only be one row, if there is a 2 or a 3
+--then that's a duplicate row, we need to delete these
+--Now, we have to filter any row with row number more than 1 and since we cannot simply add 'WHERE' clause in the above query since we have window functions
+--we can use CTE 'WITH'
+
+WITH duplicate AS (SELECT *,
+ROW_NUMBER() OVER(PARTITION BY parcel_id, propert_address, sale_price, sale_date, legal_reference
+				 ORDER BY unique_id) AS row_num
+FROM nashville
+ORDER BY parcel_id)
+
+SELECT * FROM duplicate
+WHERE row_num > 1;
+
+--now we have all the duplicates, and we want to delete them, so in the last select statement, we should replace select with delete
+
+WITH duplicate AS (SELECT *,
+ROW_NUMBER() OVER(PARTITION BY parcel_id, propert_address, sale_price, sale_date, legal_reference
+				 ORDER BY unique_id) AS row_num
+FROM nashville
+ORDER BY parcel_id)
+
+DELETE FROM duplicate
+WHERE row_num > 1;
+
+--(6) Deleting unused columns
+--we can delete owner_address and property_address, because we already created new columns for the same
+ALTER TABLE nashville
+DROP COLUMN owner_address;
+
+ALTER TABLE nashville
+DROP COLUMN tax_district;
+
+ALTER TABLE nashville
+DROP COLUMN propert_address;
