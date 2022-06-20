@@ -1,0 +1,108 @@
+--Creating the table first
+CREATE TABLE information (
+unique_id VARCHAR(45),
+product_name VARCHAR(400),
+	manufacturer VARCHAR(100),
+	price NUMERIC,
+	number_available INT,
+	number_of_reviews INT,
+	rating NUMERIC,
+	category VARCHAR(60),
+	sub_category VARCHAR(150),
+	customer_reviews VARCHAR(500)
+);
+
+SELECT * FROM information;
+
+-- Find the number of manufacturers
+SELECT COUNT(DISTINCT manufacturer) FROM information;
+
+-- Find the number of products sold by each manufacturer
+SELECT manufacturer, COUNT(product_name) FROM information
+GROUP BY manufacturer;
+
+--Number of categories
+SELECT COUNT(DISTINCT category) FROM information;
+
+--Top 5 products with the best rating
+SELECT unique_id, product_name, MAX(rating) FROM information
+GROUP BY unique_id, product_name
+ORDER BY MAX(rating) DESC;
+
+--Best rated category
+SELECT category, MAX(rating) FROM information
+GROUP BY category
+ORDER BY MAX(rating) DESC;
+
+--Top rated manufacturers
+SELECT manufacturer, MAX(rating) FROM information
+GROUP BY manufacturer
+ORDER BY MAX(rating) DESC;
+
+--Top 5 best rated products under each category
+SELECT * FROM (
+	SELECT e.category, e.product_name,  MAX(rating) AS rate,
+ROW_NUMBER() OVER(PARTITION BY category ORDER BY MAX(rating) DESC) AS TopFive
+FROM information e
+GROUP BY e.product_name, e.category) x
+WHERE x.TopFive < 6;
+
+--Products rated 5 stars from each category
+SELECT category, product_name, MAX(rating) AS rate
+FROM information
+GROUP BY product_name, category
+HAVING MAX(rating) > 4.9
+ORDER BY category;
+
+--Top 5 most expensive categories
+--Top 5 most expensive categories
+SELECT category, SUM(price) FROM information
+GROUP BY category
+ORDER BY SUM(PRICE) DESC
+LIMIT 5;
+
+--Top 10 most expensive products
+SELECT product_name, price FROM information
+WHERE price IS NOT NULL
+ORDER BY price DESC
+LIMIT 10;
+
+--Products with no reviews
+SELECT category, product_name FROM information
+WHERE customer_reviews IS NULL AND category IS NOT NULL;
+
+--Top 10 least rated products
+SELECT category, product_name, price, rating FROM information
+WHERE category IS NOT NULL AND product_name IS NOT NULL AND price IS NOT NULL
+ORDER BY rating
+LIMIT 10;
+
+--Top 10 least rated category
+SELECT category, AVG(rating) FROM information
+WHERE category IS NOT NULL 
+GROUP BY category
+ORDER BY AVG(rating)
+LIMIT 10;
+
+--Top 10 highest rated category
+SELECT category, AVG(rating) FROM information
+WHERE category IS NOT NULL 
+GROUP BY category
+ORDER BY AVG(rating) DESC
+LIMIT 10;
+
+--Average price point of each category
+SELECT category, AVG(price) FROM information
+WHERE category IS NOT NULL
+GROUP BY category
+ORDER BY AVG(price);
+
+--Average rating of each manufacturer
+SELECT manufacturer, AVG(rating) FROM information
+GROUP BY manufacturer
+ORDER BY AVG(rating);
+
+--Total sales across each manufacturer
+SELECT manufacturer, SUM(price) FROM information
+GROUP BY manufacturer
+ORDER BY AVG(price) DESC;
